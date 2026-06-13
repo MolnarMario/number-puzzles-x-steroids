@@ -5,6 +5,16 @@ shipped to the live site.
 
 ---
 
+## [0.5.2] — 2026-06-14 — Undo fix
+
+### Fixed
+- **Undo now reverts exactly one move at a time when using a controller.** The gamepad
+  light/dark buttons placed tiles without recording an undo step, so a single Undo rolled back
+  every controller tile plus the last mouse tile at once. Each controller tile is now its own
+  step, matching mouse and keyboard.
+
+---
+
 ## [0.5.1] — 2026-06-14 — Fighters quotes
 
 ### Added
