@@ -149,7 +149,7 @@
 <div class="overlay" id="solveModal">
   <div class="card">
     <h2>Let the needle work itself?</h2>
-    <p>The solver will stitch the tiles in one by one, following the same deductions you would make. Sudoku plots fill themselves digit by digit.</p>
+    <p>“This map” is the one you last stitched or typed on — solved together with any sudoku or picross it touches. The whole canvas solves map by map, skipping anything already done.</p>
     <div class="btns">
       <button class="primary" id="btnSolveRegion">Solve this map</button>
       <button id="btnSolveAll">Solve the whole canvas</button>
@@ -1037,8 +1037,11 @@ function finishSetup(){
 // ============================================================
 //  GAME STATE
 // ============================================================
+let lastTouchedRegion = -1;
+
 function setCell(i, s){
   if (regionDone[regionOf[i]] || gameWon || locked[i] || zoneOf[i] >= 0) return;
+  lastTouchedRegion = regionOf[i];
   state[i] = s;
   if (s === 0) wrong.delete(i);
   else if ((s === 1) !== (sol[i] === 1)) wrong.add(i);
@@ -1245,8 +1248,9 @@ function startSolve(regionIds){
   const list = [];
   for (const r of regionIds) {
     if (regionDone[r]) continue;
-    if (r >= REG_PIX) list.push(...zoneSolveOrder(ZONES[r - REG_PIX]));
-    else list.push(...regionSolveOrder(r));
+    const z = r - REG_PIX;
+    if (z >= 0 && z < ZONES.length) list.push(...zoneSolveOrder(ZONES[z]));
+    else list.push(...regionSolveOrder(r));   // organic maps AND picross patches are stitched
   }
   if (!list.length) return;
   solveQueue.push(...list);
@@ -1772,12 +1776,14 @@ function cycleZone(zone, p, dir){
   if (v > n) v = 0;
   if (v < 0) v = n;
   zone.entries[p] = v;
+  lastTouchedRegion = zone.region;
   checkZone(zone);
   updateHUD(); scheduleSave(); needsDraw = true;
 }
 
 function setZoneDigit(zone, p, v){
   zone.entries[p] = v;
+  lastTouchedRegion = zone.region;
   checkZone(zone);
   updateHUD(); scheduleSave(); needsDraw = true;
 }
@@ -1908,8 +1914,25 @@ document.getElementById('btnSolve').onclick = () => {
 document.getElementById('btnCancelSolve').onclick = () => document.getElementById('solveModal').classList.remove('show');
 document.getElementById('btnSolveRegion').onclick = () => {
   document.getElementById('solveModal').classList.remove('show');
-  const r = regionAtCenter();
-  if (r >= 0) startSolve([r]);
+  // the map you last stitched or typed on; fall back to the view center
+  const r = (lastTouchedRegion >= 0 && !regionDone[lastTouchedRegion])
+    ? lastTouchedRegion : regionAtCenter();
+  if (r < 0) return;
+  const targets = [r];
+  // an organic map drags along every unsolved plot/patch it borders
+  if (r < REG_PIX) {
+    const extras = new Set();
+    for (const i of regionCells[r]) {
+      const x = i % GW, y = (i / GW) | 0;
+      for (const j of [x > 0 ? i - 1 : -1, x < GW - 1 ? i + 1 : -1, y > 0 ? i - GW : -1, y < GH - 1 ? i + GW : -1]) {
+        if (j < 0) continue;
+        const o = regionOf[j];
+        if (o >= REG_PIX && !regionDone[o]) extras.add(o);
+      }
+    }
+    targets.push(...extras);
+  }
+  startSolve(targets);
 };
 document.getElementById('btnSolveAll').onclick = () => {
   document.getElementById('solveModal').classList.remove('show');
