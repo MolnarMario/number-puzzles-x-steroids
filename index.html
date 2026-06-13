@@ -105,6 +105,7 @@
   <button id="btnFit">⛶ Fit</button>
   <button id="btnPad">🎮</button>
   <button id="btnHelp">?</button>
+  <button id="btnShare" title="Export your canvas as a code, or import one">⇄ Share</button>
   <button id="btnReset">Reset</button>
 </div>
 
@@ -216,6 +217,22 @@
     <div class="btns">
       <button class="primary" id="btnConfirmReset">Yes, start over</button>
       <button id="btnCancelReset">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="shareModal">
+  <div class="card" style="max-width:600px">
+    <h2>⇄ Share this canvas</h2>
+    <p>The picture is the same on every copy of the game — so a code carries only your difficulty, stitches and digits. Copy yours below, or paste a friend's to load it.</p>
+    <p style="margin-bottom:6px;text-align:left;font-size:13px;color:var(--text)"><b>Your code</b> — copy and share it</p>
+    <textarea id="shareOut" readonly style="width:100%;height:84px;resize:none;background:rgba(255,255,255,.7);border:1px solid var(--panel-border);border-radius:8px;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--text);word-break:break-all;margin-bottom:8px"></textarea>
+    <div class="btns" style="margin-bottom:18px"><button class="primary" id="btnShareCopy">📋 Copy code</button></div>
+    <p style="margin-bottom:6px;text-align:left;font-size:13px;color:var(--text)"><b>Load a code</b> — paste one in and import</p>
+    <textarea id="shareIn" placeholder="Paste a shared code here…" style="width:100%;height:60px;resize:none;background:rgba(255,255,255,.7);border:1px solid var(--panel-border);border-radius:8px;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--text);word-break:break-all;margin-bottom:8px"></textarea>
+    <div class="btns">
+      <button class="primary" id="btnShareImport">Import this code</button>
+      <button id="btnCloseShare">Close</button>
     </div>
   </div>
 </div>
@@ -1278,6 +1295,159 @@ function resetGame(){
   updateHUD(); fitView(); needsDraw = true;
 }
 
+// ============================================================
+//  SHARE / EXPORT-IMPORT
+//  The painting is generated deterministically from a fixed SEED, so every
+//  copy of the game holds the identical solution. A shareable code therefore
+//  needs only: format version + difficulty + the 3-valued `state` array +
+//  each plot's entered digits. The recipient simply replays that progress.
+//
+//  Binary layout (then base64, prefixed with SHARE_TAG):
+//    [0]      version (=1)
+//    [1]      difficulty index into DIFF_ORDER (0..4)
+//    [2..]    state: N cells, 2 bits each, 4 per byte  → ceil(N/4) bytes
+//    [..]     zone entries in ZONES order, digit 0..9 in 4 bits, 2 per byte
+// ============================================================
+const SHARE_TAG = 'NPXS1:';
+const SHARE_VER = 1;
+
+function b64FromBytes(bytes){
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function bytesFromB64(str){
+  const bin = atob(str);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+// build the binary blob from the current game state
+function exportCode(){
+  const stBytes = (N + 3) >> 2;                 // 4 cells per byte
+  let zBytes = 0;
+  for (const z of ZONES) zBytes += (z.n * z.n + 1) >> 1;   // 2 digits per byte
+  const buf = new Uint8Array(2 + stBytes + zBytes);
+  buf[0] = SHARE_VER;
+  buf[1] = Math.max(0, DIFF_ORDER.indexOf(difficulty));
+  let o = 2;
+  for (let i = 0; i < N; i += 4) {
+    buf[o++] = (state[i] & 3)
+      | ((i + 1 < N ? state[i + 1] & 3 : 0) << 2)
+      | ((i + 2 < N ? state[i + 2] & 3 : 0) << 4)
+      | ((i + 3 < N ? state[i + 3] & 3 : 0) << 6);
+  }
+  for (const z of ZONES) {
+    const e = z.entries || new Uint8Array(z.n * z.n);
+    const NN = z.n * z.n;
+    for (let p = 0; p < NN; p += 2)
+      buf[o++] = (e[p] & 15) | ((p + 1 < NN ? e[p + 1] & 15 : 0) << 4);
+  }
+  return SHARE_TAG + b64FromBytes(buf);
+}
+
+// parse a code into { diff, state:Uint8Array(N), zones:[Uint8Array,...] }
+// returns null on any malformed / wrong-size input
+function decodeCode(code){
+  try {
+    let s = (code || '').trim();
+    if (!s) return null;
+    if (s.startsWith(SHARE_TAG)) s = s.slice(SHARE_TAG.length);
+    s = s.replace(/\s+/g, '');
+    const buf = bytesFromB64(s);
+    if (buf.length < 2 || buf[0] !== SHARE_VER) return null;
+    const diff = DIFF_ORDER[buf[1]];
+    if (!diff) return null;
+    const stBytes = (N + 3) >> 2;
+    let zBytes = 0;
+    for (const z of ZONES) zBytes += (z.n * z.n + 1) >> 1;
+    if (buf.length !== 2 + stBytes + zBytes) return null;
+    const st = new Uint8Array(N);
+    let o = 2;
+    for (let i = 0; i < N; i += 4) {
+      const b = buf[o++];
+      st[i] = b & 3;
+      if (i + 1 < N) st[i + 1] = (b >> 2) & 3;
+      if (i + 2 < N) st[i + 2] = (b >> 4) & 3;
+      if (i + 3 < N) st[i + 3] = (b >> 6) & 3;
+    }
+    for (let i = 0; i < N; i++) if (st[i] > 2) return null;
+    const zones = [];
+    for (const z of ZONES) {
+      const NN = z.n * z.n;
+      const e = new Uint8Array(NN);
+      for (let p = 0; p < NN; p += 2) {
+        const b = buf[o++];
+        e[p] = b & 15;
+        if (p + 1 < NN) e[p + 1] = (b >> 4) & 15;
+      }
+      for (let p = 0; p < NN; p++) if (e[p] > z.n) return null;
+      zones.push(e);
+    }
+    return { diff, state: st, zones };
+  } catch (e) { return null; }
+}
+
+// apply a decoded payload's state/entries onto the live game, recompute all
+// derived state, and persist — mirrors loadSave + finishSetup. Assumes the
+// clues already match `data.diff`.
+function applyImported(data){
+  state.set(data.state);
+  wrong.clear();
+  ZONES.forEach((z, k) => {
+    const e = data.zones[k];
+    if (z.entries && e && e.length === z.n * z.n) z.entries.set(e);
+  });
+  // givens stay authoritative; recompute the mistake set on the painting
+  for (let i = 0; i < N; i++) {
+    if (zoneOf[i] >= 0) continue;
+    if (state[i] !== 0 && (state[i] === 1) !== (sol[i] === 1)) wrong.add(i);
+  }
+  applyGivens();
+  regionDone.fill(false); regionDoneAt.fill(0);
+  gameWon = false; mistakePromptOpen = false;
+  selZ = -1; selP = -1;
+  for (let r = 0; r < REG_PIX; r++) checkRegion(r, true);
+  for (const z of ZONES) checkZone(z, true);
+  clearUndo();
+  scheduleSave();
+  updateHUD();
+  needsDraw = true;
+}
+
+// top-level entry: validate, then apply (re-weaving clues first if the code's
+// difficulty differs from the current one — same path setDifficulty uses)
+function importCode(code, onDone){
+  if (!generated || solving) { toast('One moment — the canvas is still busy.', true); return false; }
+  const data = decodeCode(code);
+  if (!data) { toast('Hmm — I could not read that code. Check you copied all of it.', true); return false; }
+  const finish = () => {
+    applyImported(data);
+    if (typeof onDone === 'function') onDone();
+    toast('Canvas imported — your friend’s progress is on the loom.', true);
+  };
+  if (data.diff !== difficulty) {
+    // re-weave clues for the imported difficulty, then replay onto them
+    difficulty = data.diff;
+    try { localStorage.setItem(DIFF_KEY, difficulty); } catch (e) {}
+    updateDiffSel();
+    const loader = document.getElementById('loader');
+    loader.querySelector('p').textContent = 'Reweaving the clues…';
+    loader.classList.remove('done');
+    setTimeout(() => {
+      regenClues(() => {
+        finish();
+        loader.classList.add('done');
+        setTimeout(maybeShowAdvanced, 520);
+      });
+    }, 80);
+  } else {
+    finish();
+  }
+  return true;
+}
+
 // ---------- proverbs ----------
 const PROVERBS = [
   'A stitch in time saves nine.',
@@ -2164,6 +2334,29 @@ document.getElementById('btnShowAdvanced').onclick = () => {
   document.getElementById('advancedModal').classList.add('show');
 };
 document.getElementById('btnCloseAdvanced').onclick = () => document.getElementById('advancedModal').classList.remove('show');
+document.getElementById('btnShare').onclick = () => {
+  if (!generated) return;
+  document.getElementById('shareOut').value = exportCode();
+  document.getElementById('shareIn').value = '';
+  document.getElementById('shareModal').classList.add('show');
+};
+document.getElementById('btnCloseShare').onclick = () => document.getElementById('shareModal').classList.remove('show');
+document.getElementById('btnShareCopy').onclick = () => {
+  const ta = document.getElementById('shareOut');
+  const done = () => toast('Code copied — paste it to a friend.', true);
+  const fallback = () => {
+    ta.focus(); ta.select();
+    try { document.execCommand('copy'); done(); }
+    catch (e) { toast('Copy failed — select the code and copy it manually.', true); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(done, fallback);
+  } else fallback();
+};
+document.getElementById('btnShareImport').onclick = () => {
+  const code = document.getElementById('shareIn').value;
+  if (importCode(code)) document.getElementById('shareModal').classList.remove('show');
+};
 document.getElementById('btnReset').onclick = () => document.getElementById('resetModal').classList.add('show');
 document.getElementById('btnCancelReset').onclick = () => document.getElementById('resetModal').classList.remove('show');
 document.getElementById('btnConfirmReset').onclick = () => {
