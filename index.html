@@ -1340,17 +1340,18 @@ function regionAtCenter(){
 // ============================================================
 function giveHint(){
   if (!generated || gameWon || solving) return;
-  const candidates = [];
+  const cands = [];   // { i, type: 'dark' | 'light' | 'adv' }
   for (let i = 0; i < N; i++) {
     if (clue[i] < 0 || regionDone[regionOf[i]]) continue;
     let L = 0, U = 0;
     for (const j of nbhd[i]) { if (state[j] === 1) L++; else if (state[j] === 0) U++; }
     if (U === 0) continue;
     const need = clue[i] - L;
-    if (need === 0 || need === U) candidates.push(i);
+    if (need === 0)      cands.push({ i, type: 'dark' });
+    else if (need === U) cands.push({ i, type: 'light' });
   }
   // no simple move? look for a cross-clue subtraction pair
-  if (!candidates.length) {
+  if (!cands.length) {
     outer:
     for (let i = 0; i < N; i++) {
       if (clue[i] < 0 || regionDone[regionOf[i]]) continue;
@@ -1372,19 +1373,35 @@ function giveHint(){
         let xCount = 0, zCount = 0;
         for (const j of UA) if (!nbhd[b].includes(j)) xCount++;
         for (const j of UB) if (!nbhd[i].includes(j)) zCount++;
-        if (needA - needB === xCount && (xCount > 0 || zCount > 0)) { candidates.push(i); continue outer; }
+        if (needA - needB === xCount && (xCount > 0 || zCount > 0)) { cands.push({ i, type: 'adv' }); continue outer; }
       }
     }
   }
-  if (!candidates.length) {
+  if (!cands.length) {
     toast('No clear deduction in sight — perhaps a stitch is out of place…', true);
     return;
   }
-  const i = candidates[(Math.random() * candidates.length) | 0];
+  // keep hints useful: stay in the map you're working on, and of those pick
+  // the clue nearest the centre of the screen — no more teleporting to a
+  // random 0/9 across the canvas
+  const focus = (lastTouchedRegion >= 0 && !regionDone[lastTouchedRegion]) ? lastTouchedRegion : regionAtCenter();
+  let pool = cands.filter(c => regionOf[c.i] === focus);
+  if (!pool.length) pool = cands;
+  const cx = (innerWidth / 2 - view.x) / view.s, cy = (innerHeight / 2 - view.y) / view.s;
+  let best = pool[0], bestD = Infinity;
+  for (const c of pool) {
+    const gx = c.i % GW + 0.5, gy = (c.i / GW | 0) + 0.5;
+    const d = (gx - cx) * (gx - cx) + (gy - cy) * (gy - cy);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  const i = best.i;
   hintCell = i; hintT = performance.now();
   const gx = i % GW + 0.5, gy = (i / GW | 0) + 0.5;
   const ts = Math.max(view.s, 30);
   animateView(innerWidth / 2 - gx * ts, innerHeight / 2 - gy * ts + 14, ts);
+  toast(best.type === 'dark'  ? 'Hint: this clue already sees all its light tiles — every unstitched tile in the ring is dark.'
+      : best.type === 'light' ? 'Hint: every unstitched tile in the highlighted ring must be light.'
+      : 'Hint: compare this clue with an overlapping neighbour — together they force tiles in the ring.', true);
 }
 
 function animateView(tx, ty, ts){
