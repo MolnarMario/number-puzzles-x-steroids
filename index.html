@@ -430,16 +430,37 @@ function growRegions(){
   regionOf.fill(-1);                                  // clear any previous map's growth
   for (let i = 0; i < N; i++) if (zoneOf[i] >= 0 || picrossOf[i] >= 0) regionOf[i] = -2;
 
-  // jittered seeds, multi-source randomized growth → organic blobs
-  const COLS = 6, ROWS = 3, cw = GW / COLS, ch = GH / ROWS;
+  // plant region seeds, then grow them outward into organic blobs
   const frontier = [];
   let K = 0;
-  for (let sy = 0; sy < ROWS; sy++) for (let sx = 0; sx < COLS; sx++) {
-    let i = Math.min(GH - 1, (sy * ch + rng() * ch) | 0) * GW + Math.min(GW - 1, (sx * cw + rng() * cw) | 0);
+  if (mapDef().hand) {
+    // castle: the original fixed 6×3 jittered grid (kept byte-identical)
+    const COLS = 6, ROWS = 3, cw = GW / COLS, ch = GH / ROWS;
+    for (let sy = 0; sy < ROWS; sy++) for (let sx = 0; sx < COLS; sx++) {
+      let i = Math.min(GH - 1, (sy * ch + rng() * ch) | 0) * GW + Math.min(GW - 1, (sx * cw + rng() * cw) | 0);
+      let guard = 0;
+      while (regionOf[i] !== -1 && guard++ < 800) i = (rng() * N) | 0;
+      if (regionOf[i] !== -1) continue;
+      regionOf[i] = K; frontier.push(i); K++;
+    }
+  } else {
+    // other maps: scatter a seed-derived number of seeds with a spacing
+    // rejection — genuinely different region count, sizes and arrangement
+    const avg = 260 + ((rng() * 200) | 0);          // avg region size 260..460 cells
+    const want = Math.max(8, Math.round(N / avg));
+    const minD2 = avg * 0.35;                        // keep seeds spread out
+    const pts = [];
     let guard = 0;
-    while (regionOf[i] !== -1 && guard++ < 800) i = (rng() * N) | 0;
-    if (regionOf[i] !== -1) continue;
-    regionOf[i] = K; frontier.push(i); K++;
+    while (K < want && guard++ < want * 400) {
+      const i = (rng() * N) | 0;
+      if (regionOf[i] !== -1) continue;              // skip plots / taken cells
+      const x = i % GW, y = (i / GW) | 0;
+      let ok = true;
+      for (const p of pts) { const dx = (p % GW) - x, dy = ((p / GW) | 0) - y; if (dx * dx + dy * dy < minD2) { ok = false; break; } }
+      if (!ok) continue;
+      regionOf[i] = K; frontier.push(i); pts.push(i); K++;
+    }
+    if (K === 0) { for (let i = 0; i < N; i++) if (regionOf[i] === -1) { regionOf[i] = 0; frontier.push(i); K = 1; break; } }
   }
   while (frontier.length) {
     const idx = (rng() * frontier.length) | 0;
