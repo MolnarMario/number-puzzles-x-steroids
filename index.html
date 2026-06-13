@@ -1704,6 +1704,14 @@ function loop(now){
   draw(now);
 }
 
+// the cell whose 3×3 neighbourhood we highlight: the controller cursor when
+// active, otherwise the mouse hover. Suppressed inside sudoku / picross plots.
+function workingCell(){
+  const hi = (padActive && padCursorI >= 0) ? padCursorI : hoverCell;
+  if (hi < 0 || zoneOf[hi] >= 0 || picrossOf[hi] >= 0) return -1;
+  return hi;
+}
+
 function draw(now){
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, innerWidth, innerHeight);
@@ -1744,6 +1752,29 @@ function draw(now){
     for (let gx = gx0; gx <= gx1 + 1; gx++) { const px = view.x + gx * s; ctx.moveTo(px, view.y + gy0 * s); ctx.lineTo(px, view.y + (gy1 + 1) * s); }
     for (let gy = gy0; gy <= gy1 + 1; gy++) { const py = view.y + gy * s; ctx.moveTo(view.x + gx0 * s, py); ctx.lineTo(view.x + (gx1 + 1) * s, py); }
     ctx.stroke();
+  }
+
+  // ---- 3×3 neighbourhood highlight around the working cell ----
+  // (drawn under the clue numbers so they stay crisp; never over plots)
+  {
+    const hi = workingCell();
+    if (hi >= 0) {
+      const hx = hi % GW, hy = (hi / GW) | 0;
+      ctx.fillStyle = 'rgba(240,162,36,.22)';
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = hx + dx, ny = hy + dy;
+        if (nx < 0 || nx >= GW || ny < 0 || ny >= GH) continue;
+        const j = ny * GW + nx;
+        if (zoneOf[j] >= 0 || picrossOf[j] >= 0) continue;   // skip plot cells
+        ctx.fillRect(view.x + nx * s, view.y + ny * s, s + 0.5, s + 0.5);
+      }
+      // outline the exact square you're on (the controller draws its own box)
+      if (!(padActive && padCursorI >= 0)) {
+        ctx.strokeStyle = 'rgba(240,162,36,.85)';
+        ctx.lineWidth = Math.max(1.5, s * 0.1);
+        ctx.strokeRect(view.x + hx * s + 0.6, view.y + hy * s + 0.6, s - 1.2, s - 1.2);
+      }
+    }
   }
 
   // ---- clues ----
