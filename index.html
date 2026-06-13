@@ -569,10 +569,31 @@ const nbhd = new Array(MAXN);
 // (re)build the whole puzzle layout for the current map + SEED + dimensions:
 // pick & place the plots, grow organic region maps, the picross lookup, clipped
 // neighborhoods, and freshly-sized done arrays. Run on every map switch.
+// attach each sudoku plot / picross patch to the organic region that most
+// surrounds it — its "home" region. A home region only counts as fully done
+// (and fires its quote) once its own tiles AND all attached plots are solved.
+function attachPlots(){
+  for (const list of [ZONES, PICROSS]) for (const z of list) {
+    const tally = new Map();
+    for (const i of z.cells) {
+      const x = i % GW, y = (i / GW) | 0;
+      for (const j of [x > 0 ? i-1 : -1, x < GW-1 ? i+1 : -1, y > 0 ? i-GW : -1, y < GH-1 ? i+GW : -1]) {
+        if (j < 0) continue;
+        const r = regionOf[j];
+        if (r >= 0 && r < REG_PIX) tally.set(r, (tally.get(r) || 0) + 1);
+      }
+    }
+    let best = -1, bestC = -1;
+    for (const [r, c] of tally) if (c > bestC) { bestC = c; best = r; }
+    z.attached = best >= 0 ? best : 0;   // fallback: first region (rare: plot fully enclosed by plots)
+  }
+}
+
 function buildLayout(){
   choosePlots();
   fillPlotCells();
   growRegions();
+  attachPlots();
   picrossByRegion.clear();
   for (const p of PICROSS) picrossByRegion.set(p.region, p);
   for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
