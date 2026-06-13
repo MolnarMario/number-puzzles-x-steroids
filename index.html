@@ -445,49 +445,45 @@ function growRegions(){
   regionOf.fill(-1);                                  // clear any previous map's growth
   for (let i = 0; i < N; i++) if (zoneOf[i] >= 0 || picrossOf[i] >= 0) regionOf[i] = -2;
 
-  // plant region seeds, then grow them outward into organic blobs
-  const frontier = [];
-  let K = 0;
-  if (mapDef().hand) {
-    // castle: the original fixed 6×3 jittered grid (kept byte-identical)
-    const COLS = 6, ROWS = 3, cw = GW / COLS, ch = GH / ROWS;
-    for (let sy = 0; sy < ROWS; sy++) for (let sx = 0; sx < COLS; sx++) {
-      let i = Math.min(GH - 1, (sy * ch + rng() * ch) | 0) * GW + Math.min(GW - 1, (sx * cw + rng() * cw) | 0);
-      let guard = 0;
-      while (regionOf[i] !== -1 && guard++ < 800) i = (rng() * N) | 0;
-      if (regionOf[i] !== -1) continue;
-      regionOf[i] = K; frontier.push(i); K++;
-    }
-  } else {
-    // other maps: scatter a seed-derived number of seeds with a spacing
-    // rejection — genuinely different region count, sizes and arrangement
-    const avg = 260 + ((rng() * 200) | 0);          // avg region size 260..460 cells
-    const want = Math.max(8, Math.round(N / avg));
-    const minD2 = avg * 0.35;                        // keep seeds spread out
-    const pts = [];
-    let guard = 0;
-    while (K < want && guard++ < want * 400) {
-      const i = (rng() * N) | 0;
-      if (regionOf[i] !== -1) continue;              // skip plots / taken cells
-      const x = i % GW, y = (i / GW) | 0;
-      let ok = true;
-      for (const p of pts) { const dx = (p % GW) - x, dy = ((p / GW) | 0) - y; if (dx * dx + dy * dy < minD2) { ok = false; break; } }
-      if (!ok) continue;
-      regionOf[i] = K; frontier.push(i); pts.push(i); K++;
-    }
-    if (K === 0) { for (let i = 0; i < N; i++) if (regionOf[i] === -1) { regionOf[i] = 0; frontier.push(i); K = 1; break; } }
+  // scatter seed points (seed-derived count, spaced apart)
+  const avg = 380 + ((rng() * 280) | 0);            // avg region size 380..660 cells
+  const want = Math.max(6, Math.round(N / avg));
+  const minD2 = avg * 0.4;
+  const pts = [];
+  let K = 0, guard = 0;
+  while (K < want && guard++ < want * 500) {
+    const i = (rng() * N) | 0;
+    if (regionOf[i] !== -1) continue;               // skip plots / taken cells
+    const x = i % GW, y = (i / GW) | 0;
+    let ok = true;
+    for (const p of pts) { const dx = (p % GW) - x, dy = ((p / GW) | 0) - y; if (dx * dx + dy * dy < minD2) { ok = false; break; } }
+    if (!ok) continue;
+    regionOf[i] = K; pts.push(i); K++;
   }
-  while (frontier.length) {
-    const idx = (rng() * frontier.length) | 0;
-    const i = frontier[idx];
-    frontier[idx] = frontier[frontier.length - 1]; frontier.pop();
-    const x = i % GW, y = (i / GW) | 0, r = regionOf[i];
-    if (x > 0      && regionOf[i - 1]  === -1) { regionOf[i - 1]  = r; frontier.push(i - 1); }
-    if (x < GW - 1 && regionOf[i + 1]  === -1) { regionOf[i + 1]  = r; frontier.push(i + 1); }
-    if (y > 0      && regionOf[i - GW] === -1) { regionOf[i - GW] = r; frontier.push(i - GW); }
-    if (y < GH - 1 && regionOf[i + GW] === -1) { regionOf[i + GW] = r; frontier.push(i + GW); }
+  if (K === 0) { for (let i = 0; i < N; i++) if (regionOf[i] === -1) { regionOf[i] = K++; pts.push(i); break; } }
+
+  // marker-controlled watershed: a 256-bucket priority flood keyed on edge
+  // strength — flat interiors fill first, borders settle along image edges, so
+  // each finished map is a coherent chunk of the picture (a boat, a character…)
+  const buckets = new Array(256); for (let b = 0; b < 256; b++) buckets[b] = [];
+  for (const s of pts) buckets[0].push(s | (regionOf[s] << 16));
+  for (let lv = 0; lv < 256; lv++) {
+    const q = buckets[lv];
+    if (!q) continue;
+    for (let qi = 0; qi < q.length; qi++) {
+      const v = q[qi], c = v & 0xffff, r = v >> 16;
+      const x = c % GW, y = (c / GW) | 0;
+      const nbs = [x > 0 ? c - 1 : -1, x < GW - 1 ? c + 1 : -1, y > 0 ? c - GW : -1, y < GH - 1 ? c + GW : -1];
+      for (const nb of nbs) {
+        if (nb < 0 || regionOf[nb] !== -1) continue;
+        regionOf[nb] = r;
+        const lvl = edge[nb] > lv ? edge[nb] : lv;
+        buckets[lvl].push(nb | (r << 16));
+      }
+    }
+    buckets[lv] = null;
   }
-  // safety: claim any unreached pocket from an assigned neighbor
+  // safety: claim any unreached pocket (e.g. enclosed by plots) from a neighbor
   let stray = true;
   while (stray) {
     stray = false;
@@ -500,26 +496,27 @@ function growRegions(){
     }
   }
 
-  // merge undersized maps into their most-adjacent neighbor
-  const MIN = 60;
+  // merge undersized maps across their weakest seam (lowest edge along the
+  // shared border) so strong image edges survive as region borders
+  const MIN = 70;
   for (;;) {
     const sizes = new Array(K).fill(0);
     for (let i = 0; i < N; i++) if (regionOf[i] >= 0) sizes[regionOf[i]]++;
     let small = -1;
     for (let r = 0; r < K; r++) if (sizes[r] > 0 && sizes[r] < MIN) { small = r; break; }
     if (small < 0) break;
-    const border = new Map();
+    const bc = new Map(), be = new Map();
     for (let i = 0; i < N; i++) {
       if (regionOf[i] !== small) continue;
       const x = i % GW, y = (i / GW) | 0;
       for (const j of [x > 0 ? i-1 : -1, x < GW-1 ? i+1 : -1, y > 0 ? i-GW : -1, y < GH-1 ? i+GW : -1]) {
         if (j < 0) continue;
         const o = regionOf[j];
-        if (o >= 0 && o !== small) border.set(o, (border.get(o) || 0) + 1);
+        if (o >= 0 && o !== small) { bc.set(o, (bc.get(o) || 0) + 1); be.set(o, (be.get(o) || 0) + (edge[i] > edge[j] ? edge[i] : edge[j])); }
       }
     }
-    let bestR = -1, bestC = -1;
-    for (const [o, c] of border) if (c > bestC) { bestC = c; bestR = o; }
+    let bestR = -1, bestAvg = Infinity;
+    for (const [o, c] of bc) { const a = be.get(o) / c; if (a < bestAvg) { bestAvg = a; bestR = o; } }
     if (bestR < 0) break;
     for (let i = 0; i < N; i++) if (regionOf[i] === small) regionOf[i] = bestR;
   }
@@ -595,6 +592,7 @@ const clue   = new Int8Array(MAXN).fill(-1);  // -1 = no clue, else 0..9
 const state  = new Uint8Array(MAXN);          // 0 unknown, 1 light, 2 dark
 const cellCol = new Array(MAXN);              // art color per cell
 const locked = new Uint8Array(MAXN);          // pre-stitched starter tiles
+const edge   = new Uint8Array(MAXN);          // image edge strength (for content-aware borders)
 let regionDone = [];
 let regionDoneAt = [];
 const wrong = new Set();
@@ -929,14 +927,18 @@ img.src = mapDef().src;
 function startGeneration(){
   SEED = mapDef().seed;
   dimsForImage(img, mapDef());
+  sampleImage(img);     // paint + edge map (region borders flood along the edges)
   buildLayout();
-  buildFromImage(img);
+  weaveTexture();
   regenClues(finishSetup);
 }
 
 // (re)derive the painting (sol + art colours), its sheltered pockets and the
 // cross-stitch weave from `image`. Reused on every map switch.
-function buildFromImage(image){
+// sample the image → art colours, an edge-strength map (for content-aware
+// region borders) and the two-tone solution. Must run before buildLayout()
+// since the region grower floods along the edges.
+function sampleImage(image){
   const off = document.createElement('canvas');
   off.width = GW; off.height = GH;
   const octx = off.getContext('2d', { willReadFrequently: true });
@@ -951,6 +953,14 @@ function buildFromImage(image){
     cellCol[i] = `rgb(${r},${g},${b})`;
     const L = 0.299*r + 0.587*g + 0.114*b;
     lum[i] = L; hist[L | 0]++;
+  }
+  // edge strength = local colour gradient; region borders prefer to fall here
+  for (let y = 0; y < GH; y++) for (let x = 0; x < GW; x++) {
+    const i = y * GW + x;
+    let e = 0;
+    if (x < GW - 1) { const j = i + 1;  e += Math.abs(d[i*4]-d[j*4]) + Math.abs(d[i*4+1]-d[j*4+1]) + Math.abs(d[i*4+2]-d[j*4+2]); }
+    if (y < GH - 1) { const j = i + GW; e += Math.abs(d[i*4]-d[j*4]) + Math.abs(d[i*4+1]-d[j*4+1]) + Math.abs(d[i*4+2]-d[j*4+2]); }
+    edge[i] = Math.min(255, e >> 1);
   }
   let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
   let sumB = 0, wB = 0, best = 0, otsu = 127;
@@ -972,7 +982,11 @@ function buildFromImage(image){
     const i = y * GW + x;
     sol[i] = lum[i] > otsu * (1 - MIX) + (s / c) * MIX ? 1 : 0;
   }
+}
 
+// the cross-stitch weave + sheltered flat pockets (needs regions + nbhd, so it
+// runs after buildLayout())
+function weaveTexture(){
   // flat pockets: pick scattered sanctuaries inside large flat fields and
   // shield them from the weave — these small calm patches are the only
   // places 0 and 9 clues can live, and difficulty decides how many show
@@ -1041,8 +1055,9 @@ function rebuildForMap(id, done){
   const apply = image => {
     SEED = mapDef(id).seed;
     dimsForImage(image, mapDef(id));   // board shape from this image's aspect
-    buildLayout();                     // grow this map's own regions/sudoku layout from its seed
-    buildFromImage(image);
+    sampleImage(image);                // paint + edge map
+    buildLayout();                     // regions flood along the edges; sudoku layout from seed
+    weaveTexture();
     regenClues(() => { if (loader) loader.classList.add('done'); done(); needsDraw = true; });
   };
   const cached = mapImgCache[id];
