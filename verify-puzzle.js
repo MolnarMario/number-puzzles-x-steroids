@@ -10,8 +10,8 @@ function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a
   t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
 const DIFF = {
-  veryeasy: { redundancy: 0.65, passes: 1, extremeKeep: 1.0, zGivens: 1.5,  zSwaps: 0.25, pHelp: 0.20 },
-  easy:     { redundancy: 0.40, passes: 1, extremeKeep: 0.6, zGivens: 1.25, zSwaps: 0.5,  pHelp: 0.10 },
+  veryeasy: { redundancy: 0.65, passes: 1, extremeKeep: 1.0, zGivens: 1.5,  zSwaps: 0.25, pHelp: 0.20, basicOnly: true },
+  easy:     { redundancy: 0.40, passes: 1, extremeKeep: 0.6, zGivens: 1.25, zSwaps: 0.5,  pHelp: 0.10, basicOnly: true },
   medium:   { redundancy: 0.20, passes: 1, extremeKeep: 0.3, zGivens: 1.0,  zSwaps: 1.0,  pHelp: 0.05 },
   hard:     { redundancy: 0.08, passes: 1, extremeKeep: 0.1, zGivens: 0.85, zSwaps: 1.5,  pHelp: 0 },
   veryhard: { redundancy: 0,    passes: 2, extremeKeep: 0,   zGivens: 0.7,  zSwaps: 2.0,  pHelp: 0 },
@@ -280,7 +280,7 @@ function genRegion(r, difficulty){
     let changed = true;
     while (changed && unknown > 0) {
       changed = basicPass(active);
-      if (!changed) changed = advancedPass(active);
+      if (!changed && !cfg.basicOnly) changed = advancedPass(active);
     }
     return unknown === 0;
   }

@@ -210,9 +210,13 @@ const DIFF_KEY = SAVE_KEY + '-diff';
 // redundancy = spare clues kept overall; extremeKeep = how many of the
 // flat-pocket 0/9 clues are shown; zGivens scales sudoku givens; zSwaps
 // scales jigsaw irregularity; pHelp = fraction of picross pre-stitched
+// basicOnly = the two gentlest tiers must stay solvable by plain 3×3
+//   counting alone (no cross-clue subtraction ever required), so a player
+//   never hits a stall that needs the harder overlap technique — the pruner
+//   simply keeps more clues / reveals a few more starters to honor that
 const DIFF = {
-  veryeasy: { redundancy: 0.65, passes: 1, extremeKeep: 1.0, zGivens: 1.5,  zSwaps: 0.25, pHelp: 0.20, label: '✿ Very Easy' },
-  easy:     { redundancy: 0.40, passes: 1, extremeKeep: 0.6, zGivens: 1.25, zSwaps: 0.5,  pHelp: 0.10, label: '☘ Easy' },
+  veryeasy: { redundancy: 0.65, passes: 1, extremeKeep: 1.0, zGivens: 1.5,  zSwaps: 0.25, pHelp: 0.20, basicOnly: true, label: '✿ Very Easy' },
+  easy:     { redundancy: 0.40, passes: 1, extremeKeep: 0.6, zGivens: 1.25, zSwaps: 0.5,  pHelp: 0.10, basicOnly: true, label: '☘ Easy' },
   medium:   { redundancy: 0.20, passes: 1, extremeKeep: 0.3, zGivens: 1.0,  zSwaps: 1.0,  pHelp: 0.05, label: '⚖ Medium' },
   hard:     { redundancy: 0.08, passes: 1, extremeKeep: 0.1, zGivens: 0.85, zSwaps: 1.5,  pHelp: 0,    label: '🔥 Hard' },
   veryhard: { redundancy: 0,    passes: 2, extremeKeep: 0,   zGivens: 0.7,  zSwaps: 2.0,  pHelp: 0,    label: '💀 Very Hard' },
@@ -968,7 +972,8 @@ function genRegionClues(r){
     let changed = true;
     while (changed && unknown > 0) {
       changed = basicPass(active);
-      if (!changed) changed = advancedPass(active);
+      // gentle tiers stay basic-counting-only: never lean on subtraction
+      if (!changed && !cfg.basicOnly) changed = advancedPass(active);
     }
     return unknown === 0;
   }
