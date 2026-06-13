@@ -452,6 +452,7 @@ let view = { x: 0, y: 0, s: 12 };
 let dpr = 1, needsDraw = true;
 let viewAnim = null, hintCell = -1, hintT = 0;
 let gameWon = false, generated = false;
+let lastInput = 'mouse';    // 'mouse' | 'pad' — which input drives the highlight
 
 let resizeTimer = null;
 function resize(){
@@ -1576,6 +1577,10 @@ function pollGamepad(now){
   for (let b = 0; b < gp.buttons.length; b++) pressed.push(gp.buttons[b].pressed);
   const edge = b => b >= 0 && !!pressed[b] && !padPrev[b];
 
+  // any real controller activity takes the highlight back from the mouse
+  if (pressed.some(Boolean) || Math.abs(gp.axes[0] || 0) > 0.5 || Math.abs(gp.axes[1] || 0) > 0.5
+      || Math.abs(gp.axes[2] || 0) > 0.25 || Math.abs(gp.axes[3] || 0) > 0.25) lastInput = 'pad';
+
   if (!padActive && (pressed.some(Boolean) || gp.axes.some(a => Math.abs(a) > 0.5))) {
     padActive = true;
     if (padCursorI < 0) padCursorI = cellAt(innerWidth / 2, innerHeight / 2);
@@ -1707,7 +1712,7 @@ function loop(now){
 // the cell whose 3×3 neighbourhood we highlight: the controller cursor when
 // active, otherwise the mouse hover. Suppressed inside sudoku / picross plots.
 function workingCell(){
-  const hi = (padActive && padCursorI >= 0) ? padCursorI : hoverCell;
+  const hi = (lastInput === 'pad' && padActive && padCursorI >= 0) ? padCursorI : hoverCell;
   if (hi < 0 || zoneOf[hi] >= 0 || picrossOf[hi] >= 0) return -1;
   return hi;
 }
@@ -1769,7 +1774,7 @@ function draw(now){
         ctx.fillRect(view.x + nx * s, view.y + ny * s, s + 0.5, s + 0.5);
       }
       // outline the exact square you're on (the controller draws its own box)
-      if (!(padActive && padCursorI >= 0)) {
+      if (lastInput !== 'pad') {
         ctx.strokeStyle = 'rgba(240,162,36,.85)';
         ctx.lineWidth = Math.max(1.5, s * 0.1);
         ctx.strokeRect(view.x + hx * s + 0.6, view.y + hy * s + 0.6, s - 1.2, s - 1.2);
@@ -1911,7 +1916,7 @@ function draw(now){
   }
 
   // ---- gamepad cursor ----
-  if (padActive && padCursorI >= 0) {
+  if (lastInput === 'pad' && padActive && padCursorI >= 0) {
     const gx = padCursorI % GW, gy = (padCursorI / GW) | 0;
     if (gx >= gx0 - 1 && gx <= gx1 + 1 && gy >= gy0 - 1 && gy <= gy1 + 1) {
       ctx.strokeStyle = 'rgba(70,50,120,.9)';
@@ -2022,7 +2027,7 @@ cvs.addEventListener('mousedown', e => {
 
 addEventListener('mousemove', e => {
   const h = cellAt(e.clientX, e.clientY);
-  if (h !== hoverCell) { hoverCell = h; needsDraw = true; }
+  if (h !== hoverCell || lastInput !== 'mouse') { hoverCell = h; lastInput = 'mouse'; needsDraw = true; }
   if (!drag) return;
   if (drag.mode === 'pan') {
     view.x += e.clientX - drag.mx; view.y += e.clientY - drag.my;
