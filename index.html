@@ -77,6 +77,11 @@
   .dgrid .clue{background:#b9aadb;color:#2f2358}
   .dlegend{font-size:12px;color:var(--muted);margin:-8px 0 16px}
   .dlegend b.l{color:#3a9d7e}.dlegend b.d{color:#c44a6a}
+  /* character dialogue box */
+  .card.dialogue{text-align:left;border-left:5px solid var(--accent);max-width:480px}
+  .card.dialogue .dlg-name{color:var(--accent);font-weight:700;letter-spacing:.5px;font-size:15px;margin-bottom:10px}
+  .card.dialogue .dlg-quote{color:var(--text);font-style:italic;font-size:18px;line-height:1.55;margin-bottom:18px}
+  .card.dialogue .btns{justify-content:flex-end}
 
   /* ---------- toast ---------- */
   #toast{position:fixed;left:50%;bottom:58px;transform:translateX(-50%) translateY(20px);
@@ -240,6 +245,14 @@
       <button id="btnShareUpload">📂 Open a file…</button>
       <button id="btnCloseShare">Close</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="charModal">
+  <div class="card dialogue">
+    <div class="dlg-name" id="charName"></div>
+    <p class="dlg-quote" id="charQuote"></p>
+    <div class="btns"><button class="primary" id="btnCharClose">Continue ▸</button></div>
   </div>
 </div>
 
@@ -943,6 +956,7 @@ function loadMap(id){
     for (const z of ZONES) z.entries = z.puzzle.slice();
     regionDone.fill(false); regionDoneAt.fill(0);
     gameWon = false; mistakePromptOpen = false; selZ = -1; selP = -1;
+    charQueue.length = 0; document.getElementById('charModal').classList.remove('show');
     clearUndo();
     loadSave();
     applyGivens();
@@ -1225,6 +1239,7 @@ function checkRegion(r, silent){
       const pp = picrossByRegion.get(r);
       if (pp) toast(`${pp.name} is mended — its picture joins the canvas.`, true);
       else toast(PROVERBS[(Math.random() * PROVERBS.length) | 0]);
+      maybeUnlockChar();
     }
     checkWin();
   } else regionDoneAt[r] = -1e9;
@@ -1239,7 +1254,7 @@ function checkZone(zone, silent){
   regionDoneAt[zone.region] = performance.now();
   if (selZ === zone.idx) { selZ = -1; selP = -1; }
   if (!silent) {
-    if (!solving) toast(`${zone.name} is solved — its piece joins the canvas.`, true);
+    if (!solving) { toast(`${zone.name} is solved — its piece joins the canvas.`, true); maybeUnlockChar(); }
     checkWin();
   } else regionDoneAt[zone.region] = -1e9;
   needsDraw = true;
@@ -1250,10 +1265,45 @@ function checkWin(){
     gameWon = true;
     scheduleSave();
     setTimeout(() => {
-      document.getElementById('winImg').src = IMG_SRC;
+      document.getElementById('winImg').src = mapDef().src;
       document.getElementById('winModal').classList.add('show');
     }, 1200);
   }
+}
+
+// ============================================================
+//  CHARACTERS — only the "crew" map. Completing sections unlocks cast members
+//  who greet you with a quote in a dialogue box. Edit names/quotes freely;
+//  `unlockAt` is how many sections must be finished before they appear, and
+//  you can add as many entries as you like.
+// ============================================================
+const CREW_CHARACTERS = [
+  { unlockAt: 1,  name: 'Vance — the Foreman', quote: 'The first stitch is the hardest. After that, the canvas pulls you along.' },
+  { unlockAt: 12, name: 'Isolde — the Navigator', quote: 'Halfway is no place to rest. It is where the picture finally starts to argue back.' },
+];
+const CHARS_KEY = 'proverbs2-crew-chars';
+let charsShown = new Set();
+try { (JSON.parse(localStorage.getItem(CHARS_KEY) || '[]') || []).forEach(k => charsShown.add(k)); } catch (e) {}
+function saveCharsShown(){ try { localStorage.setItem(CHARS_KEY, JSON.stringify([...charsShown])); } catch (e) {} }
+const charQueue = [];
+
+function maybeUnlockChar(){
+  if (currentMap !== 'crew') return;
+  const done = regionDone.reduce((s, v) => s + (v ? 1 : 0), 0);
+  for (let k = 0; k < CREW_CHARACTERS.length; k++) {
+    if (charsShown.has(k) || CREW_CHARACTERS[k].unlockAt > done) continue;
+    charsShown.add(k);
+    charQueue.push(k);
+  }
+  if (charQueue.length) { saveCharsShown(); if (!document.getElementById('charModal').classList.contains('show')) showNextChar(); }
+}
+function showNextChar(){
+  const k = charQueue.shift();
+  if (k === undefined) return;
+  const c = CREW_CHARACTERS[k];
+  document.getElementById('charName').textContent = c.name;
+  document.getElementById('charQuote').textContent = '“' + c.quote + '”';
+  document.getElementById('charModal').classList.add('show');
 }
 
 let mistakePromptOpen = false;
@@ -2439,6 +2489,10 @@ document.getElementById('btnShare').onclick = () => {
   document.getElementById('shareModal').classList.add('show');
 };
 document.getElementById('btnCloseShare').onclick = () => document.getElementById('shareModal').classList.remove('show');
+document.getElementById('btnCharClose').onclick = () => {
+  document.getElementById('charModal').classList.remove('show');
+  if (charQueue.length) setTimeout(showNextChar, 250);   // next unlocked character, if any
+};
 document.getElementById('btnShareCopy').onclick = () => {
   const ta = document.getElementById('shareOut');
   const done = () => toast('Code copied — paste it to a friend.', true);
