@@ -1100,7 +1100,7 @@ function loadMap(id){
     for (const z of ZONES) z.entries = z.puzzle.slice();
     regionDone.fill(false); regionDoneAt.fill(0);
     gameWon = false; mistakePromptOpen = false; selZ = -1; selP = -1;
-    charQueue.length = 0; document.getElementById('charModal').classList.remove('show');
+    quoteQueue.length = 0; document.getElementById('charModal').classList.remove('show');
     clearUndo();
     loadSave();
     applyGivens();
@@ -1385,7 +1385,7 @@ function checkRegion(r, silent){
       if (pp) toast(`${pp.name} is mended — its picture joins the canvas.`, true);
       else toast(PROVERBS[(Math.random() * PROVERBS.length) | 0]);
     }
-    maybeUnlockChar();   // fires on manual completion AND during auto-solve
+    maybeShowQuote();    // region+attached plots done -> quote (also during auto-solve)
     checkWin();
   } else regionDoneAt[r] = -1e9;
   needsDraw = true;
@@ -1400,7 +1400,7 @@ function checkZone(zone, silent){
   if (selZ === zone.idx) { selZ = -1; selP = -1; }
   if (!silent) {
     if (!solving) toast(`${zone.name} is solved — its piece joins the canvas.`, true);
-    maybeUnlockChar();   // fires on manual completion AND during auto-solve
+    maybeShowQuote();    // region+attached plots done -> quote (also during auto-solve)
     checkWin();
   } else regionDoneAt[zone.region] = -1e9;
   needsDraw = true;
@@ -1418,37 +1418,59 @@ function checkWin(){
 }
 
 // ============================================================
-//  CHARACTERS — only the "crew" map. Completing sections unlocks cast members
-//  who greet you with a quote in a dialogue box. Edit names/quotes freely;
-//  `unlockAt` is how many sections must be finished before they appear, and
-//  you can add as many entries as you like.
+//  CHARACTER QUOTES — per map, keyed by organic region id (Rn). A region's
+//  quote fires once, when that region AND every plot/patch attached to it
+//  (attachPlots) are all solved. Add maps / edit lines freely; omit a region
+//  to leave it silent.
 // ============================================================
-const CREW_CHARACTERS = [
-  { unlockAt: 1,  name: 'Vance — the Foreman', quote: 'The first stitch is the hardest. After that, the canvas pulls you along.' },
-  { unlockAt: 12, name: 'Isolde — the Navigator', quote: 'Halfway is no place to rest. It is where the picture finally starts to argue back.' },
-];
-const CHARS_KEY = 'proverbs2-crew-chars';
-let charsShown = new Set();
-try { (JSON.parse(localStorage.getItem(CHARS_KEY) || '[]') || []).forEach(k => charsShown.add(k)); } catch (e) {}
-function saveCharsShown(){ try { localStorage.setItem(CHARS_KEY, JSON.stringify([...charsShown])); } catch (e) {} }
-const charQueue = [];
+const MAP_QUOTES = {
+  crew: {
+    0: "Phenomenal.",
+    1: "The sky is so clear today, even my excuses are visible.",
+    2: "You see, there's gearheads, then there's science nerds. One kind garage, the other kind lab, you know? Yo faddah a good gearhead but I just can't see how he make someting like da Pulse. He no science nerd... Cause I'm both!",
+    3: "I just love watching things burn. Is that a crime? Well, technically yes, it's arson, but you know what I mean!",
+    4: "The ladies at the Nordstrom Rack I worked at called me 'Dumpy' due to my large posterior.",
+    5: "I ain't making memories right now.",
+    6: "Even fo shake, I just do like dis:",
+    7: "Sonar, we talked about this. No relapsing into villainy just because you're bored. If you need a dopamine hit, go play a video game or do a puzzle. Do not hijack a yacht again!",
+    8: "The fuck you mean temporarily? Bitch, you blind forevah!",
+    9: "They told me I have to stop referring to my collateral damage as 'happy little accidents.' Apparently, Bob Ross's estate can sue us for that. Total buzzkil!",
+  },
+};
+// which region quotes have already been shown, per map (persisted)
+let quotesShown = {};
+try { quotesShown = JSON.parse(localStorage.getItem('proverbs2-quotes') || '{}') || {}; } catch (e) {}
+function shownSet(){ return quotesShown[currentMap] || (quotesShown[currentMap] = []); }
+function saveQuotes(){ try { localStorage.setItem('proverbs2-quotes', JSON.stringify(quotesShown)); } catch (e) {} }
+const quoteQueue = [];
 
-function maybeUnlockChar(){
-  if (currentMap !== 'crew') return;
-  const done = regionDone.reduce((s, v) => s + (v ? 1 : 0), 0);
-  for (let k = 0; k < CREW_CHARACTERS.length; k++) {
-    if (charsShown.has(k) || CREW_CHARACTERS[k].unlockAt > done) continue;
-    charsShown.add(k);
-    charQueue.push(k);
-  }
-  if (charQueue.length) { saveCharsShown(); if (!document.getElementById('charModal').classList.contains('show')) showNextChar(); }
+// a "home region" is fully done once its own tiles and every plot/patch
+// attached to it are all solved
+function homeRegionComplete(r){
+  if (!regionDone[r]) return false;
+  for (const z of ZONES) if (z.attached === r && !regionDone[z.region]) return false;
+  for (const p of PICROSS) if (p.attached === r && !regionDone[p.region]) return false;
+  return true;
 }
-function showNextChar(){
-  const k = charQueue.shift();
-  if (k === undefined) return;
-  const c = CREW_CHARACTERS[k];
-  document.getElementById('charName').textContent = c.name;
-  document.getElementById('charQuote').textContent = '“' + c.quote + '”';
+function maybeShowQuote(){
+  const q = MAP_QUOTES[currentMap];
+  if (!q) return;
+  const shown = shownSet();
+  let added = false;
+  for (const rs in q) {
+    const r = +rs;
+    if (shown.indexOf(r) >= 0 || !homeRegionComplete(r)) continue;
+    shown.push(r); quoteQueue.push(q[r]); added = true;
+  }
+  if (added) saveQuotes();
+  if (quoteQueue.length && !document.getElementById('charModal').classList.contains('show')) showNextQuote();
+}
+function showNextQuote(){
+  const text = quoteQueue.shift();
+  if (text === undefined) return;
+  const nameEl = document.getElementById('charName');
+  nameEl.textContent = ''; nameEl.style.display = 'none';   // quotes have no speaker name (yet)
+  document.getElementById('charQuote').textContent = '“' + text + '”';
   document.getElementById('charModal').classList.add('show');
 }
 
@@ -1575,7 +1597,7 @@ function resetGame(){
   regionDone.fill(false); regionDoneAt.fill(0);
   gameWon = false; mistakePromptOpen = false;
   clearUndo();
-  charsShown.clear(); saveCharsShown(); charQueue.length = 0;   // re-arm character unlocks
+  quotesShown[currentMap] = []; saveQuotes(); quoteQueue.length = 0;   // re-arm this map's quotes
   try { localStorage.removeItem(stateKey()); localStorage.removeItem(zonesKey()); } catch (e) {}
   updateHUD(); fitView(); needsDraw = true;
 }
@@ -2692,7 +2714,7 @@ document.getElementById('btnShare').onclick = () => {
 document.getElementById('btnCloseShare').onclick = () => document.getElementById('shareModal').classList.remove('show');
 document.getElementById('btnCharClose').onclick = () => {
   document.getElementById('charModal').classList.remove('show');
-  if (charQueue.length) setTimeout(showNextChar, 250);   // next unlocked character, if any
+  if (quoteQueue.length) setTimeout(showNextQuote, 250);   // next region's quote, if any
 };
 document.getElementById('btnShareCopy').onclick = () => {
   const ta = document.getElementById('shareOut');
