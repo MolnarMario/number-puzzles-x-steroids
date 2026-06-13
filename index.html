@@ -27,6 +27,7 @@
   #progressTxt{font-size:12px;color:var(--muted);min-width:88px}
   #mistakes{font-size:13px;color:var(--muted)}
   #mistakes b{color:var(--accent2)}
+  #timer{font-size:13px;color:var(--muted);min-width:64px;font-variant-numeric:tabular-nums}
   .spacer{flex:1}
   button{background:rgba(255,255,255,.6);border:1px solid var(--panel-border);color:var(--text);
     border-radius:8px;padding:7px 13px;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap}
@@ -100,6 +101,7 @@
   <div id="progressWrap"><div id="progressBar"></div></div>
   <span id="progressTxt">0%</span>
   <span id="mistakes">Mistakes <b>0</b>/4</span>
+  <span id="timer" title="Time since your first stitch">⏱ 00:00</span>
   <div class="spacer"></div>
   <select id="selMap" title="Pick a canvas — each keeps its own progress"></select>
   <select id="selDiff" title="Difficulty — clues are rewoven, your stitches stay"></select>
@@ -604,6 +606,7 @@ let view = { x: 0, y: 0, s: 12 };
 let dpr = 1, needsDraw = true;
 let viewAnim = null, hintCell = -1, hintT = 0;
 let gameWon = false, generated = false;
+let timerStart = -1;        // wall-clock ms when the player placed their first tile; -1 = not started
 let lastInput = 'mouse';    // 'mouse' | 'pad' — which input drives the highlight
 
 let resizeTimer = null;
@@ -635,7 +638,7 @@ const C = {
   light:'#fdfcff', dark:'#453577',
   grid:'rgba(96,72,150,.18)',
   clue:'#473a6e', clueOnDark:'#dcd2f7', clueBad:'#d23c4e',
-  regionBorder:'rgba(78,56,136,.9)', boardEdge:'#7a64b8',
+  regionBorder:'rgba(240,166,54,.95)', boardEdge:'#7a64b8',
   zoneBg:'#f0eafb', zoneGold:'#e8a04c', zoneBox:'rgba(196,138,52,.85)',
   zoneInk:'#473a6e', zoneGiven:'#a86a1f', zoneBad:'#cc3b3b',
   zoneSel:'rgba(138,92,245,.30)',
@@ -1328,6 +1331,7 @@ let lastCell = -1;          // last board/plot cell the player acted on
 
 function setCell(i, s){
   if (regionDone[regionOf[i]] || gameWon || locked[i] || zoneOf[i] >= 0) return;
+  if (timerStart < 0 && !solving) timerStart = Date.now();   // start the session clock on the first genuine user stitch
   lastTouchedRegion = regionOf[i];
   lastCell = i;
   state[i] = s;
@@ -1493,6 +1497,22 @@ function updateHUD(){
   document.getElementById('progressBar').style.width = pct + '%';
   document.getElementById('progressTxt').textContent = `${pct}% · ${maps}/${REG_COUNT} maps`;
   document.getElementById('mistakes').innerHTML = `Mistakes <b>${wrong.size}</b>/4`;
+}
+
+function fmtTime(ms){
+  const t = Math.max(0, ms / 1000 | 0);
+  const h = t / 3600 | 0, m = (t % 3600) / 60 | 0, sec = t % 60;
+  const pad = n => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+
+let timerShown = '';
+function updateTimer(){
+  const txt = timerStart < 0 ? '00:00' : fmtTime(Date.now() - timerStart);
+  if (txt === timerShown) return;        // only touch the DOM when the displayed value changes
+  timerShown = txt;
+  const el = document.getElementById('timer');
+  if (el) el.textContent = '⏱ ' + txt;
 }
 
 // ---------- persistence ----------
@@ -2125,6 +2145,7 @@ addEventListener('gamepaddisconnected', () => updatePadStatus());
 function loop(now){
   requestAnimationFrame(loop);
   pollGamepad(now);
+  updateTimer();              // live session clock; ticks every frame, re-renders only on change
   let animating = false;
   if (viewAnim) {
     const a = viewAnim, p = Math.min(1, (now - a.t0) / a.dur);
@@ -2242,7 +2263,7 @@ function draw(now){
 
   // ---- region borders ----
   ctx.strokeStyle = C.regionBorder;
-  ctx.lineWidth = Math.max(1.5, s * 0.11);
+  ctx.lineWidth = Math.max(2, s * 0.13);
   ctx.beginPath();
   for (let gy = gy0; gy <= gy1; gy++) {
     for (let gx = gx0; gx <= gx1; gx++) {
