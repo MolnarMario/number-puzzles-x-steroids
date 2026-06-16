@@ -5,6 +5,17 @@ shipped to the live site.
 
 ---
 
+## [0.9.2] — 2026-06-17 — Strict region completion
+
+### Changed
+- **A region now reveals only when every tile is explicitly placed** — light tiles marked light
+  (left click) *and* dark/background tiles marked dark (right click). Previously, placing all the
+  light tiles auto-filled the remaining background and completed the region; now an unmarked tile
+  keeps the region open, so it won't reveal while any square is still blank. The auto-solver and
+  "solve region" place both colours, so they still complete as before.
+
+---
+
 ## [0.9.1] — 2026-06-16 — Reliability fixes & repo cleanup
 
 ### Fixed

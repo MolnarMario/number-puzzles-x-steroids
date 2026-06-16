@@ -198,7 +198,7 @@
       <li>Numbers fade once satisfied; they turn <b style="color:#d23c4e">red</b> if contradicted.</li>
       <li><b style="color:#b07a1a">Gold plots</b> are sudoku, stitched right into the canvas: click a tile and type a digit (or click to cycle). Every row, column and outlined shape needs each number exactly once.</li>
       <li><b style="color:#1f9c84">Teal patches</b> are picross: hover near one and its run clues appear. Each number is a run of consecutive light tiles, in order, in that row or column. Stitch them with the usual left/right click — the answer is the painting itself.</li>
-      <li>Finish a map, plot or patch and the painting beneath is revealed.</li>
+      <li>A map is done only when <b>every</b> tile is placed — light tiles light (left&nbsp;click) <i>and</i> dark/background tiles dark (right&nbsp;click). Finish a map, plot or patch and the painting beneath is revealed.</li>
       <li><b>Difficulty</b> (toolbar) scales everything — easier tiers keep more clues and more free 0/9 moves, give sudoku plots extra digits and tamer shapes, and pre-stitch a head start into picross patches. Your stitches and digits always survive the switch.</li>
       <li><b>Very Easy–Medium</b> need only neighbor-counting. <b>Hard</b> and <b>Very Hard</b> add <b>Advanced Deductions</b> (comparing overlapping clues) — but <i>guessing is never required</i> on any tier. Stuck? Press <b>H</b> for a hint.</li>
     </ul>
@@ -371,7 +371,7 @@ const MAPS = [
   { id: 'crew',   name: '🛡 The Crew', src: IMG_SRC_2, seed: 80218 },                    // dims derived from its aspect
   { id: 'fighters', name: '🐉 The Fighters', src: IMG_SRC_3, seed: 305139 },  // dims derived from its aspect
 ];
-const APP_VERSION = '0.9.1';   // shown bottom-right; keep in sync with CHANGELOG
+const APP_VERSION = '0.9.2';   // shown bottom-right; keep in sync with CHANGELOG
 try { document.getElementById('version').textContent = 'v' + APP_VERSION; } catch (e) {}
 const MAP_KEY = 'proverbs2-map';
 let currentMap = 'castle';
@@ -1585,14 +1585,15 @@ function setCell(i, s){
 function checkRegion(r, silent){
   if (regionDone[r]) return;
   const cells = regionCells[r];
+  // A region is solved only when EVERY tile is explicitly placed — light cells
+  // marked light (state 1) AND dark/background cells marked dark (state 2). An
+  // unmarked tile (state 0) leaves the region open; we no longer auto-fill the
+  // remaining background once the lights are done.
   for (const i of cells) {
     if (sol[i] === 1 && state[i] !== 1) return;
-    if (sol[i] === 0 && state[i] === 1) return;
+    if (sol[i] === 0 && state[i] !== 2) return;
   }
-  for (const i of cells) {
-    if (sol[i] === 0) state[i] = 2;
-    wrong.delete(i);
-  }
+  for (const i of cells) wrong.delete(i);
   regionDone[r] = true;
   regionDoneAt[r] = performance.now();
   if (!silent) {
