@@ -5,6 +5,86 @@ shipped to the live site.
 
 ---
 
+## [0.9.1] — 2026-06-16 — Reliability fixes & repo cleanup
+
+### Fixed
+- **Sweeping your mistakes can now complete a region.** Clearing wrong tiles reset the cells but
+  didn't re-check whether the region was finished, so a region you completed *by* fixing your last
+  mistakes wouldn't reveal. `clearErrors` now re-checks every region it touched.
+- **No region can strand cells outside its body.** A new load-time pass (`healRegions`) guarantees
+  every region is a single connected blob: if a partition leaves a region in two pieces, the largest
+  piece is kept and the stray fragment is folded into the neighbour it borders most — so you never
+  have to hunt a few cells marooned inside another region. Region ids are preserved (quotes and
+  saved progress are unaffected) and it's a no-op for well-formed maps. `_bake_map.js` also warns at
+  authoring time if a map-def has a disconnected region.
+- **Flash map: the top-right region no longer reaches across to the top-left.** A hand-transcription
+  slip had scattered two of that region's cells onto the far-left border; they're reattached to the
+  region that actually surrounds them.
+
+### Changed
+- The repo no longer tracks any image. The one committed-but-unused PNG was removed and `.gitignore`
+  now ignores all image types, so debug screenshots and source art can't be pushed by accident (the
+  game embeds all artwork as data URIs inside `index.html`).
+
+---
+
+## [0.9.0] — 2026-06-16 — Instant-loading clues
+
+### Changed
+- **Large maps no longer freeze the page while loading.** Fill-a-pix clue generation — the slow
+  step that re-solves each region many times to prune clues — now runs in a Web Worker instead of on
+  the main thread, so switching to a big, high-resolution map (e.g. Blinding Lights) keeps the UI
+  responsive instead of locking up for several seconds. The generated puzzles are byte-for-byte
+  identical; only *where* the work runs changed.
+
+---
+
+## [0.8.0] — 2026-06-16 — "Blinding Lights" map & higher resolutions
+
+### Added
+- **A new map — "🌙 Blinding Lights"** — authored in the region editor and baked in like the others,
+  with its own autosaved progress.
+- **Adjustable pixel-art resolution** in the region editor: an aspect-locked slider trades
+  detail/length against generation time, and the engine's cell-count cap was raised to 320×180
+  (57,600 cells) to allow much higher-resolution boards.
+
+### Changed
+- **Share codes now carry 2-byte board dimensions** (format v4) so the larger boards round-trip
+  correctly; older v3 codes still import.
+
+---
+
+## [0.7.0] — 2026-06-15 — Region editor & the "Flash" map
+
+### Added
+- **A hand-drawn region-authoring editor** (`region-editor.html`): load an image, draw region
+  borders with the mouse, and the tool auto-detects each region as you close it, auto-places the
+  sudoku/picross plots, and lets you attach a quote per region. It reuses the game's *exact*
+  generation code, so the board and region ids match in-game. Export a map-def and bake it into the
+  game with `node _bake_map.js`. A read-only **region inspector** (`region-map.html`) renders any
+  map's generated partition.
+- **A new map — "Flash"** — the first map authored end-to-end in the editor, with per-region quotes.
+  Its name is revealed **region by region** as you solve, instead of shown up front.
+
+### Changed
+- The region-solved (pin-locked) popup now says **"region"** instead of "map".
+
+---
+
+## [0.6.0] — 2026-06-15 — Music, focused hover & a responsive header
+
+### Added
+- **Background music player** in the header. The (large) audio file is deliberately loaded *last*,
+  after the game is interactive, so it never slows the core load.
+
+### Changed
+- **The 3×3 hover highlight is clipped to the current region** — squares that would spill across a
+  region border are no longer highlighted, since they don't count toward the tile you're on.
+- **The header is responsive and grouped** — controls reflow into labelled groups and stay usable on
+  small / narrow screens.
+
+---
+
 ## [0.5.2] — 2026-06-14 — Undo fix
 
 ### Fixed
