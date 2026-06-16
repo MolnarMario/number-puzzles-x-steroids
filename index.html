@@ -1250,21 +1250,58 @@ function regenZones(){
 // (re)generate all fill-a-pix clues + starter givens for the current
 // difficulty; the underlying solution never changes, so player stitches
 // survive a difficulty switch
+// build a one-off Web Worker (from a Blob, so the game stays a single file) that
+// runs the EXACT same genRegionClues off the main thread. It rebuilds the
+// region-clipped nbhd + regionCells from a copy of regionOf, generates every
+// organic region's clues, and posts progress + the finished clue/locked buffers.
+function makeClueWorker(){
+  const src =
+    mulberry32.toString() + '\n' +
+    genRegionClues.toString() + '\n' +
+    'var GW,GH,N,REG_PIX,SEED,difficulty,DIFF,sol,regionOf,nbhd,regionCells,clue,locked;\n' +
+    'self.onmessage=function(e){var d=e.data;GW=d.GW;GH=d.GH;N=d.N;REG_PIX=d.REG_PIX;SEED=d.SEED;difficulty=d.difficulty;DIFF=d.DIFF;sol=d.sol;regionOf=d.regionOf;' +
+    'clue=new Int8Array(N);clue.fill(-1);locked=new Uint8Array(N);' +
+    'nbhd=new Array(N);for(var y=0;y<GH;y++)for(var x=0;x<GW;x++){var i=y*GW+x,L=[];for(var dy=-1;dy<=1;dy++)for(var dx=-1;dx<=1;dx++){var nx=x+dx,ny=y+dy;if(nx>=0&&nx<GW&&ny>=0&&ny<GH&&regionOf[ny*GW+nx]===regionOf[i])L.push(ny*GW+nx);}nbhd[i]=L;}' +
+    'regionCells=[];for(var r=0;r<REG_PIX;r++)regionCells[r]=[];for(var j=0;j<N;j++){var rr=regionOf[j];if(rr>=0&&rr<REG_PIX)regionCells[rr].push(j);}' +
+    'for(var k=0;k<REG_PIX;k++){genRegionClues(k);self.postMessage({progress:(k+1)/REG_PIX});}' +
+    'self.postMessage({clue:clue,locked:locked},[clue.buffer,locked.buffer]);};';
+  const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  const w = new Worker(url);
+  URL.revokeObjectURL(url);
+  return w;
+}
+// synchronous fallback (original behaviour): one region per event-loop turn
+function syncRegen(done, bar){
+  let idx = 0;
+  (function step(){
+    if (idx < REG_PIX) { genRegionClues(idx); idx++; if (bar) bar.style.width = (idx / REG_PIX * 100) + '%'; setTimeout(step, 0); }
+    else done();
+  })();
+}
+let clueWorker = null;
 function regenClues(done){
   locked.fill(0);
   clue.fill(-1);
-  for (const pz of PICROSS) setupPicross(pz);
+  for (const pz of PICROSS) setupPicross(pz);   // picross/sudoku gen is cheap — stays on the main thread
   regenZones();
-  let idx = 0;
   const bar = document.getElementById('loadBar');
-  (function step(){
-    if (idx < REG_PIX) {
-      genRegionClues(idx);
-      idx++;
-      bar.style.width = (idx / REG_PIX * 100) + '%';
-      setTimeout(step, 0);
-    } else done();
-  })();
+  if (bar) bar.style.width = '0%';
+  if (clueWorker) { clueWorker.terminate(); clueWorker = null; }   // cancel a superseded run (fast difficulty/map switches)
+  let worker = null;
+  try { worker = makeClueWorker(); } catch (e) { worker = null; }
+  if (!worker) { syncRegen(done, bar); return; }   // Workers/Blob unavailable → synchronous
+  clueWorker = worker;
+  worker.onerror = () => { worker.terminate(); if (clueWorker === worker) clueWorker = null; syncRegen(done, bar); };
+  worker.onmessage = ev => {
+    const d = ev.data;
+    if (d.progress !== undefined) { if (bar) bar.style.width = (d.progress * 100) + '%'; return; }
+    const wc = d.clue, wl = d.locked;                // merge only the organic-region cells (picross/sudoku already set)
+    for (let i = 0; i < N; i++) if (regionOf[i] >= 0 && regionOf[i] < REG_PIX) { clue[i] = wc[i]; locked[i] = wl[i]; }
+    worker.terminate(); if (clueWorker === worker) clueWorker = null;
+    done();
+  };
+  const solCopy = sol.slice(0, N), regCopy = regionOf.slice(0, N);   // copies; the worker may transfer them, main keeps its own
+  worker.postMessage({ SEED, GW, GH, N, REG_PIX, difficulty, DIFF, sol: solCopy, regionOf: regCopy }, [solCopy.buffer, regCopy.buffer]);
 }
 
 function setDifficulty(d){
