@@ -1,4 +1,16 @@
-# reference screenshots from the original game (not ours to publish)
+# This is a single-file game: all artwork ships embedded as data URIs inside
+# index.html, so the repo never needs loose image files. Ignore every image so
+# debug screenshots, source art, and reference shots can't get pushed by accident.
+# (If you ever genuinely need to commit one, use: git add -f <file>)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+
+# reference screenshots from the original game (not ours to publish) — kept
+# explicit for documentation; already covered by the rules above
 example.png
 p1demo.png
 bug1.png
