@@ -1682,8 +1682,10 @@ function maybeMistakePrompt(){
 function clearErrors(){
   if (!wrong.size) return;
   pushUndo();
-  for (const i of wrong) state[i] = 0;
+  const affected = new Set();
+  for (const i of wrong) { state[i] = 0; affected.add(regionOf[i]); }
   wrong.clear();
+  for (const r of affected) checkRegion(r);   // sweeping the bad marks may complete a region → reveal + quote + win
   updateHUD(); scheduleSave(); needsDraw = true;
 }
 
