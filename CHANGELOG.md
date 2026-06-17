@@ -5,6 +5,16 @@ shipped to the live site.
 
 ---
 
+## [0.11.1] — 2026-06-17 — Controller follows the mouse
+
+### Fixed
+- **The controller cursor now starts where you last clicked.** Clicking a square with the mouse and
+  then reaching for the controller used to drop you at an unrelated spot (the controller's old
+  position or the screen centre). Now a mouse click — and any paint stroke — moves the controller
+  cursor with it, so picking the controller back up continues from the square you were just on.
+
+---
+
 ## [0.11.0] — 2026-06-17 — Online co-op
 
 ### Added
