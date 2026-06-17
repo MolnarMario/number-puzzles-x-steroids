@@ -5,6 +5,15 @@ shipped to the live site.
 
 ---
 
+## [0.12.3] — 2026-06-17 — Esc closes any modal
+
+### Added
+- **Press Esc to close the open dialog** — it runs that modal's own Close/Cancel action (so the win
+  screen's Esc dismisses to admire the canvas rather than restarting, the PIN box cancels, etc.). It
+  works even while the PIN field is focused; with no modal open, Esc still deselects a sudoku cell.
+
+---
+
 ## [0.12.2] — 2026-06-17 — Keep a co-op board as your own
 
 ### Added

@@ -470,7 +470,7 @@ const MAPS = [
   { id: 'crew',   name: '🛡 The Crew', src: IMG_SRC_2, seed: 80218 },                    // dims derived from its aspect
   { id: 'fighters', name: '🐉 The Fighters', src: IMG_SRC_3, seed: 305139 },  // dims derived from its aspect
 ];
-const APP_VERSION = '0.12.2';   // shown bottom-right; keep in sync with CHANGELOG
+const APP_VERSION = '0.12.3';   // shown bottom-right; keep in sync with CHANGELOG
 try { document.getElementById('version').textContent = 'v' + APP_VERSION; } catch (e) {}
 const MAP_KEY = 'proverbs2-map';
 let currentMap = 'castle';
@@ -3466,6 +3466,26 @@ addEventListener('keydown', e => {
   else if ((e.key === 'x' || e.key === 'X') && pl.hoverCell >= 0 && !solving && zoneOf[pl.hoverCell] < 0) { if (!regionDone[regionOf[pl.hoverCell]] && !locked[pl.hoverCell] && !gameWon) pushUndo(); setCell(pl.hoverCell, state[pl.hoverCell] === 2 ? 0 : 2); }
 });
 addEventListener('keyup', e => { if (e.code === 'Space') mousePlayer().spaceHeld = false; });
+
+// Esc closes whatever modal is open — running that modal's real Close/Cancel
+// handler (not just hiding it). Capture phase so it fires even when a field like
+// the PIN input is focused; if no modal is open it falls through to the game
+// (e.g. Esc deselects a sudoku cell).
+const MODAL_CLOSE = {
+  helpModal: 'btnCloseHelp', advancedModal: 'btnCloseAdvanced', winModal: 'btnAdmire',
+  pinModal: 'btnPinCancel', charModal: 'btnCharClose', resetModal: 'btnCancelReset',
+  solveModal: 'btnCancelSolve', mpModal: 'btnCloseMP', coopModal: 'btnCoopCancel',
+  onlineModal: 'btnCloseOnline', shareModal: 'btnCloseShare', padModal: 'btnClosePad',
+};
+addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.overlay.show');
+  if (!open) return;
+  const btn = document.getElementById(MODAL_CLOSE[open.id] || '');
+  if (btn) btn.click();
+  else { const bs = open.querySelectorAll('.btns button'); if (bs.length) bs[bs.length - 1].click(); else open.classList.remove('show'); }
+  e.preventDefault(); e.stopPropagation();
+}, true);
 
 function zoomCenter(k, pl = players[0]){
   const v = pl.view, cx = paneW(pl) / 2, cy = paneH(pl) / 2;
