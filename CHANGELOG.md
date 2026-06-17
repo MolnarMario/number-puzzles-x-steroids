@@ -5,6 +5,17 @@ shipped to the live site.
 
 ---
 
+## [0.12.2] — 2026-06-17 — Keep a co-op board as your own
+
+### Added
+- **Guests can save the shared board as their own progress.** In an online session, open
+  **👥 Multiplayer** and use **"Keep this board as my own"** (with a confirm) to copy the current
+  co-op board into your solo save for *that map only* — so you can pick up where you and your friends
+  left off, alone. It's the Share import in one click. As before, playing in multiplayer never
+  touches your solo progress on any map unless you press this; and your other maps are never affected.
+
+---
+
 ## [0.12.1] — 2026-06-17 — Modal button wrapping fix
 
 ### Fixed

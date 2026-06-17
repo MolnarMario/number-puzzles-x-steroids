@@ -304,6 +304,17 @@
     </div>
     <div id="mpOnlineActive" style="display:none">
       <p>You're in an online session.</p>
+      <div id="mpGuestSave" style="display:none;margin-bottom:14px">
+        <button id="btnSaveToLocal">💾 Keep this board as my own</button>
+        <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Saves the current co-op board as your solo progress for <b>this map only</b>, so you can continue on your own later. Your other maps stay exactly as they are.</p>
+        <div id="mpSaveConfirm" style="display:none;margin-top:10px">
+          <p style="font-size:13px;color:var(--text);margin-bottom:8px">Overwrite your solo save for this map with the current co-op board?</p>
+          <div class="btns">
+            <button class="primary" id="btnSaveConfirmYes">Yes, overwrite</button>
+            <button id="btnSaveConfirmNo">Cancel</button>
+          </div>
+        </div>
+      </div>
       <div class="btns">
         <button class="primary" id="btnOpenOnline">Online settings</button>
         <button id="btnCloseMP3">Close</button>
@@ -459,7 +470,7 @@ const MAPS = [
   { id: 'crew',   name: '🛡 The Crew', src: IMG_SRC_2, seed: 80218 },                    // dims derived from its aspect
   { id: 'fighters', name: '🐉 The Fighters', src: IMG_SRC_3, seed: 305139 },  // dims derived from its aspect
 ];
-const APP_VERSION = '0.12.1';   // shown bottom-right; keep in sync with CHANGELOG
+const APP_VERSION = '0.12.2';   // shown bottom-right; keep in sync with CHANGELOG
 try { document.getElementById('version').textContent = 'v' + APP_VERSION; } catch (e) {}
 const MAP_KEY = 'proverbs2-map';
 let currentMap = 'castle';
@@ -2841,6 +2852,19 @@ function leaveOnline(){
   netClose(); setOnlineUI(); needsDraw = true;
   if (wasJoin && backup) importCode(backup, null, true);
 }
+// (guest only) explicitly adopt the current co-op board as your OWN solo save for
+// THIS map, so you can keep going alone later. Only this map's key is written —
+// every other map you've played stays untouched. Also keep this board (not the
+// pre-join one) if you later disconnect.
+function saveCoopToLocal(){
+  if (onlineRole !== 'join') return;
+  try {
+    localStorage.setItem(stateKey(), Array.from(state.subarray(0, N)).join(''));
+    localStorage.setItem(zonesKey(), JSON.stringify(ZONES.map(z => Array.from(z.entries || []))));
+  } catch (e) {}
+  joinerBackup = exportCode();
+  toast('Saved — this co-op board is now your own progress for this map.', true);
+}
 // a remote participant dropped: the host just loses that one (keeps hosting); a
 // guest losing the host falls back to solo and gets its own board back
 function handlePeerGone(reason, pid){
@@ -3636,6 +3660,10 @@ function openMP(){
   document.getElementById('mpLocalActive').style.display = coop ? '' : 'none';
   document.getElementById('mpOnlineActive').style.display = (!coop && (online || net)) ? '' : 'none';
   if (coop) { document.getElementById('mpLocalCount').textContent = players.length; document.getElementById('mpLocalS').textContent = players.length === 1 ? '' : 's'; }
+  // the "keep this board as my own" save is for guests only (the host's board is
+  // already its own local save)
+  document.getElementById('mpGuestSave').style.display = ((online || net) && onlineRole === 'join') ? '' : 'none';
+  document.getElementById('mpSaveConfirm').style.display = 'none';
   document.getElementById('mpModal').classList.add('show');
 }
 function closeMP(){ document.getElementById('mpModal').classList.remove('show'); }
@@ -3655,6 +3683,10 @@ document.getElementById('btnPickOnline').onclick = () => {
 };
 document.getElementById('btnExitLocal').onclick = () => { exitCoop(); closeMP(); };
 document.getElementById('btnOpenOnline').onclick = () => { closeMP(); setOnlineUI(); document.getElementById('onlineModal').classList.add('show'); };
+// guest: adopt the co-op board as your own solo save (with an in-modal confirm)
+document.getElementById('btnSaveToLocal').onclick = () => { document.getElementById('mpSaveConfirm').style.display = ''; };
+document.getElementById('btnSaveConfirmNo').onclick = () => { document.getElementById('mpSaveConfirm').style.display = 'none'; };
+document.getElementById('btnSaveConfirmYes').onclick = () => { saveCoopToLocal(); document.getElementById('mpSaveConfirm').style.display = 'none'; closeMP(); };
 
 // local co-op: player-count stepper + start
 const coopCountEl = () => document.getElementById('coopCount');
