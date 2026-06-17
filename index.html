@@ -255,9 +255,10 @@
 <div class="overlay" id="solveModal">
   <div class="card">
     <h2>Let the needle work itself?</h2>
-    <p>“This region” is the one you last stitched or typed on — solved together with any sudoku or picross it touches. The whole canvas solves region by region, skipping anything already done.</p>
+    <p>“This region” is the one you last stitched or typed on — solved together with any sudoku or picross it touches. The whole canvas solves region by region, skipping anything already done. The 🐞 option solves that same region but stops one square short in each puzzle — handy for testing the final-move completion.</p>
     <div class="btns">
       <button class="primary" id="btnSolveRegion">Solve this region</button>
+      <button id="btnSolveRegionDebug">🐞 …but leave one square in each</button>
       <button id="btnSolveAll">Solve the whole canvas</button>
       <button id="btnCancelSolve">Cancel</button>
     </div>
@@ -371,7 +372,7 @@ const MAPS = [
   { id: 'crew',   name: '🛡 The Crew', src: IMG_SRC_2, seed: 80218 },                    // dims derived from its aspect
   { id: 'fighters', name: '🐉 The Fighters', src: IMG_SRC_3, seed: 305139 },  // dims derived from its aspect
 ];
-const APP_VERSION = '0.9.3';   // shown bottom-right; keep in sync with CHANGELOG
+const APP_VERSION = '0.9.4';   // shown bottom-right; keep in sync with CHANGELOG
 try { document.getElementById('version').textContent = 'v' + APP_VERSION; } catch (e) {}
 const MAP_KEY = 'proverbs2-map';
 let currentMap = 'castle';
@@ -2130,13 +2131,15 @@ function zoneSolveOrder(zone){
   return order;
 }
 
-function startSolve(regionIds){
+function startSolve(regionIds, leaveOne){
   const list = [];
   for (const r of regionIds) {
     if (regionDone[r]) continue;
     const z = r - REG_PIX;
-    if (z >= 0 && z < ZONES.length) list.push(...zoneSolveOrder(ZONES[z]));
-    else list.push(...regionSolveOrder(r));   // organic maps AND picross patches are stitched
+    // organic maps AND picross patches are stitched; sudoku plots are typed
+    const order = (z >= 0 && z < ZONES.length) ? zoneSolveOrder(ZONES[z]) : regionSolveOrder(r);
+    if (leaveOne && order.length) order.pop();   // debug: stop one square short so this puzzle stays one move from done
+    list.push(...order);
   }
   if (!list.length) return;
   clearUndo();                         // the animated solver isn't step-undoable
@@ -3002,12 +3005,12 @@ document.getElementById('pinInput').addEventListener('keydown', e => {
   e.stopPropagation();   // keep PIN typing out of the game's key shortcuts
 });
 document.getElementById('btnCancelSolve').onclick = () => document.getElementById('solveModal').classList.remove('show');
-document.getElementById('btnSolveRegion').onclick = () => {
-  document.getElementById('solveModal').classList.remove('show');
-  // the map you last stitched or typed on; fall back to the view center
+// the region you last stitched/typed on (fallback: view center), together with
+// every unsolved sudoku/picross it borders — shared by both "solve region" buttons
+function regionSolveTargets(){
   const r = (lastTouchedRegion >= 0 && !regionDone[lastTouchedRegion])
     ? lastTouchedRegion : regionAtCenter();
-  if (r < 0) return;
+  if (r < 0) return null;
   const targets = [r];
   // an organic map drags along every unsolved plot/patch it borders
   if (r < REG_PIX) {
@@ -3022,7 +3025,19 @@ document.getElementById('btnSolveRegion').onclick = () => {
     }
     targets.push(...extras);
   }
-  startSolve(targets);
+  return targets;
+}
+document.getElementById('btnSolveRegion').onclick = () => {
+  document.getElementById('solveModal').classList.remove('show');
+  const targets = regionSolveTargets();
+  if (targets) startSolve(targets);
+};
+// debug aid: solve the same region(s) but stop one square short in each puzzle,
+// so you can place the final move by hand and watch the region reveal/quote/win
+document.getElementById('btnSolveRegionDebug').onclick = () => {
+  document.getElementById('solveModal').classList.remove('show');
+  const targets = regionSolveTargets();
+  if (targets) startSolve(targets, true);
 };
 document.getElementById('btnSolveAll').onclick = () => {
   document.getElementById('solveModal').classList.remove('show');

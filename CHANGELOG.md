@@ -5,6 +5,17 @@ shipped to the live site.
 
 ---
 
+## [0.9.4] — 2026-06-17 — Solver: "leave one square" debug option
+
+### Added
+- **A 🐞 "…but leave one square in each" button** in the (PIN-gated) solver. It solves the same
+  region as "Solve this region" — its numbers plus every sudoku/picross it touches — but stops one
+  square short in *each* puzzle, leaving every one of them a single move from done. Place those last
+  squares by hand to test the final-move behaviour (region reveal, character quote, win) without
+  re-solving a whole region each time.
+
+---
+
 ## [0.9.3] — 2026-06-17 — Regions wait for their puzzles
 
 ### Fixed
