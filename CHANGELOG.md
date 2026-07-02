@@ -5,6 +5,14 @@ shipped to the live site.
 
 ---
 
+## [0.13.0] — 2026-07-02 — "Amigos" map
+
+### Added
+- **A new map — "🐾 Amigos"** — authored in the region editor: a 144×95 board with 10 regions,
+  8 sudoku zones, 8 picross plots, and a quote per region, with its own autosaved progress.
+
+---
+
 ## [0.12.4] — 2026-06-17 — Clean seams on revealed art
 
 ### Fixed
